@@ -1,0 +1,13 @@
+Lua 65202 Dissasembler
+======================
+
+A 6502 disassembler written in LuaJIT.
+
+lj6502dasm is a reimplementation of dcc6502 [1] in LuaJIT, and it was implemented for learning purposes.
+
+Usage
+-----
+
+$ luajit disasm.lua tests/ehbasic.bin
+
+[1] https://github.com/tcarmelveilleux/dcc6502.git
