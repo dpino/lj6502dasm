@@ -1,4 +1,4 @@
-module(...,package.seeall)
+#!/usr/bin/env luajit
 
 local ffi = require("ffi")
 local bit = require("bit")
@@ -349,8 +349,14 @@ local function readfile (filename)
    return buffer, size
 end
 
+local function usage(exit_code)
+   print("Usage: luajit disasm.lua <filename>")
+   os.exit(exit_code)
+end
+
 -- Main program.
 local function main()
+   if #arg == 0 then usage(1) end
    local filename = unpack(arg)
    local buffer, size = readfile(filename)
    while pc < size do
