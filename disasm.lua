@@ -3,6 +3,7 @@ module(...,package.seeall)
 local ffi = require("ffi")
 local bit = require("bit")
 
+-- Addressing modes.
 local IMMED = 0    -- Immediate.
 local ABSOL = 1    -- Absolute.
 local ZEROP = 2    -- Zero Page.
@@ -19,6 +20,7 @@ local ACCUM = 12   -- Accumulator.
 
 local bor = bit.bor
 
+local pc = 0
 local base = 0x8000
 
 local opcode_t = ffi.typeof[[
@@ -33,6 +35,7 @@ local function opc (t)
    return ffi.new(opcode_t, t)
 end             
 
+-- List of opcodes.
 local opcode_table = {
    -- ADC.
    [0x69] = opc{"ADC", IMMED},
@@ -243,13 +246,16 @@ local opcode_table = {
    [0x98] = opc{"TYA", IMPLI},
 }
 
+-- Read 16-bit word.
 local function r16 (buffer, pos)
    local hi = buffer[pos+1]
    local lo = buffer[pos+2]
-   return bit.bor(bit.lshift(lo, 8), hi)
+   return bor(bit.lshift(lo, 8), hi)
 end
 
-local function decode_stmt (buffer, pc)
+-- Decode statement from buffer at pos. Use PC if pos is nil.
+local function decode_stmt (buffer, pos)
+   pc = pos or pc
    local byte = buffer[pc]
    local opcode = opcode_table[byte]
    if not opcode then
@@ -321,15 +327,14 @@ local function decode_stmt (buffer, pc)
    return pc
 end
 
--- Init PC.
-local pc = 0
-
+-- Get filesize.
 local function filesize (fd)
    local size = fd:seek("end", 0)
    fd:seek("set", 0)
    return size
 end
 
+-- Read filename into buffer.
 local function readfile (filename)
    local fd, err = io.open(filename, "rb")
    if not fd then error(err) end
@@ -344,11 +349,12 @@ local function readfile (filename)
    return buffer, size
 end
 
+-- Main program.
 local function main()
    local filename = unpack(arg)
    local buffer, size = readfile(filename)
    while pc < size do
-      pc = decode_stmt(buffer, pc)
+      decode_stmt(buffer, pc)
    end
 end
 
