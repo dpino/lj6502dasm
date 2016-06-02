@@ -1,5 +1,5 @@
-Lua 65202 Dissasembler
-======================
+Lua 6502 Dissasembler
+=====================
 
 A 6502 disassembler written in LuaJIT.
 
