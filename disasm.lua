@@ -354,9 +354,58 @@ local function usage(exit_code)
    os.exit(exit_code)
 end
 
+local function filter_options (args)
+   local shortopts, longopts, ret = {}, {}, {}
+   local i = 1
+   while i <= #args do
+      local arg = args[i]
+      local shortopt = arg:match("-([%w])")
+      if shortopt then
+         shortopts[shortopt] = args[i+1] or ""
+      end
+      local longopt = arg:match("--([%w]+)")
+      if longopt then
+         longopts[longopt] = args[i+1] or ""
+      else
+         table.insert(ret, arg)
+      end
+      i = i + 1
+   end
+   return shortopts, longopts, ret
+end
+
+local function process_option_arguments (args, handlers)
+   local shortopts, longopts, args = filter_options(args)
+   for opt, val in pairs(shortopts) do
+      if handlers[opt] then
+         local fn = handlers[opt]
+         fn(val)
+      end
+   end
+   for opt, val in pairs(longopts) do
+      if handlers[opt] then
+         local fn = handlers[opt]
+         fn(val)
+      end
+   end
+   return args
+end
+
+local function parse_args(args)
+   local handlers = {}
+   local opts = {}
+   handlers.help = function()
+      usage(0)
+   end
+   handlers.h = handlers.help
+   local args = process_option_arguments(args, handlers)
+   if #opts == 0 then usage(1) end
+   return opts, args
+end
+
 -- Main program.
-local function main()
-   if #arg == 0 then usage(1) end
+local function main(args)
+   local opts, file = parse_args(args)
    local filename = unpack(arg)
    local buffer, size = readfile(filename)
    while pc < size do
@@ -364,4 +413,4 @@ local function main()
    end
 end
 
-main()
+main(arg)
