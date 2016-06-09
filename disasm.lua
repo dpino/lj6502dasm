@@ -446,8 +446,8 @@ end
 
 -- Main program.
 local function main(args)
-   local opts, file = parse_args(args)
-   local filename = unpack(arg)
+   local opts, args = parse_args(args)
+   local filename = unpack(args)
    local buffer, size = readfile(filename)
    while pc < size do
       decode_stmt(buffer, pc)
