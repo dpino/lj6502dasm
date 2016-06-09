@@ -1,0 +1,5 @@
+Usage: luajit disasm.lua <filename>
+
+Options:
+    -h|--help           Prints out this help.
+    -b|--base <num>     Sets base address.

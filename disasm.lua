@@ -359,8 +359,16 @@ local function readfile (filename)
    return buffer, size
 end
 
+local function include (filename)
+   local fd, errno = io.open(filename)
+   if not fd then error(errno) end
+   local content = fd:read("*all")
+   fd:close()
+   return content
+end
+
 local function usage(exit_code)
-   print("Usage: luajit disasm.lua <filename>")
+   print(include("USAGE"))
    os.exit(exit_code)
 end
 
