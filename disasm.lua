@@ -438,7 +438,11 @@ local function parse_args(args)
    handlers.help = function()
       usage(0)
    end
+   handlers.base = function (arg)
+      base = assert(tonumber(arg), "base must be a number")
+   end
    handlers.h = handlers.help
+   handlers.b = handlers.base
    local args = process_option_arguments(args, handlers)
    if #args == 0 then usage(1) end
    return opts, args
