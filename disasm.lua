@@ -3,6 +3,16 @@
 local ffi = require("ffi")
 local bit = require("bit")
 
+local longopts = {
+   help=0,
+   base=1,
+}
+
+local shortopts = {
+   h=0,
+   b=1,
+}
+
 -- Addressing modes.
 local IMMED = 0    -- Immediate.
 local ABSOL = 1    -- Absolute.
@@ -355,23 +365,42 @@ local function usage(exit_code)
 end
 
 local function filter_options (args)
-   local shortopts, longopts, ret = {}, {}, {}
+   local sopts, lopts, ret = {}, {}, {}
    local i = 1
    while i <= #args do
       local arg = args[i]
-      local shortopt = arg:match("-([%w])")
-      if shortopt then
-         shortopts[shortopt] = args[i+1] or ""
-      end
-      local longopt = arg:match("--([%w]+)")
-      if longopt then
-         longopts[longopt] = args[i+1] or ""
+      -- Is long option?
+      if arg:sub(1,2) == "--" then
+         local opt = arg:sub(3)
+         local nargs = assert(longopts[opt], ("Unknown option: --%s"):format(opt))
+         if nargs == 0 then
+            lopts[opt] = true
+         else
+            lopts[opt] = args[i+1]
+            i = i + 1
+         end
+      -- Is s option?
+      elseif arg:sub(1, 1) == "-" then
+         local opt = arg:sub(2)
+         local nargs = assert(shortopts[opt], ("Unknown option: -%s"):format(opt))
+         if nargs == 0 then
+            sopts[opt] = true
+         else
+            sopts[opt] = args[i+1]
+            i = i + 1
+         end
       else
+      -- Is argument.
          table.insert(ret, arg)
       end
       i = i + 1
    end
-   return shortopts, longopts, ret
+   return sopts, lopts, ret
+end
+
+local function fatal (...)
+   print(...)
+   usage(1)
 end
 
 local function process_option_arguments (args, handlers)
@@ -380,12 +409,16 @@ local function process_option_arguments (args, handlers)
       if handlers[opt] then
          local fn = handlers[opt]
          fn(val)
+      else
+         fatal(("Unknown option: %s"):format("-"..opt))
       end
    end
    for opt, val in pairs(longopts) do
       if handlers[opt] then
          local fn = handlers[opt]
          fn(val)
+      else
+         fatal(("Unknown option: %s"):format("--"..opt))
       end
    end
    return args
@@ -399,7 +432,7 @@ local function parse_args(args)
    end
    handlers.h = handlers.help
    local args = process_option_arguments(args, handlers)
-   if #opts == 0 then usage(1) end
+   if #args == 0 then usage(1) end
    return opts, args
 end
 
