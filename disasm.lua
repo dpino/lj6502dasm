@@ -7,12 +7,14 @@ local longopts = {
    help=0,
    base=1,
    num_bytes=1,
+   dump=0,
 }
 
 local shortopts = {
    h=0,
    b=1,
    n=1,
+   d=0,
 }
 
 -- Addressing modes.
@@ -265,13 +267,43 @@ local function r16 (buffer, pos)
    return bor(bit.lshift(lo, 8), hi)
 end
 
+local function column(text)
+   io.write(("%s\t"):format(text))
+end
+
+local function column_instr(text)
+   print(text)
+end
+
+local function column_dump(byte, word)
+   io.write(("%.2X"):format(byte))
+   if word then
+      if word < 256 then
+         io.write((" %.2X"):format(word))
+      else
+         io.write((" %.4X"):format(word))
+      end
+   else
+      io.write("   ")
+   end
+   io.write("\t\t")
+end
+
+local function column_address(addr)
+   io.write(("$%.4X\t"):format(addr))
+end
+
 -- Decode statement from buffer at pos. Use PC if pos is nil.
-local function decode_stmt (buffer, pos)
+local function decode_stmt (buffer, pos, opts)
    pc = pos or pc
    local byte = buffer[pc]
    local opcode = opcode_table[byte]
    if not opcode then
-      print(("$%.4X\t.byte %.2X"):format(base + pc, byte))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc])
+      end
+      column_instr((".byte %.2X"):format(byte))
       print()
       pc = pc + 1
       return pc
@@ -279,46 +311,90 @@ local function decode_stmt (buffer, pos)
    local name = ffi.string(opcode.name)
    if opcode.addr_mode == IMMED then
       local op1 = buffer[pc+1]
-      print(("$%.4X\t%s #$%.2X"):format(base + pc, name, op1))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], op1)
+      end
+      column_instr(("%s #$%.2X"):format(name, op1))
       pc = pc + 2
    elseif opcode.addr_mode == ABSOL then
       local word = r16(buffer, pc)
-      print(("$%.4X\t%s $%.4X"):format(base + pc, name, word))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], word)
+      end
+      print(("%s $%.4X"):format(name, word))
       pc = pc + 3
    elseif opcode.addr_mode == ZEROP then
       local byte = buffer[pc+1]
-      print(("$%.4X\t%s $%.2X"):format(base + pc, name, byte))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], byte)
+      end
+      print(("%s $%.2X"):format(name, byte))
       pc = pc + 2
    elseif opcode.addr_mode == IMPLI then
-      print(("$%.4X\t%s"):format(base + pc, name))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc])
+      end
+      print(("%s"):format(name))
       pc = pc + 1
    elseif opcode.addr_mode == INDIA then
       local word = r16(buffer, pc)
-      print(("$%.4X\t%s ($%.4X)"):format(base + pc, name, word))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], word)
+      end
+      print(("%s ($%.4X)"):format(name, word))
       pc = pc + 3
    elseif opcode.addr_mode == ABSIX then
       local word = r16(buffer, pc)
-      print(("$%.4X\t%s $%.4X,X"):format(base + pc, name, word))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], word)
+      end
+      print(("%s $%.4X,X"):format(name, word))
       pc = pc + 3
    elseif opcode.addr_mode == ABSIY then
       local word = r16(buffer, pc)
-      print(("$%.4X\t%s $%.4X,Y"):format(base + pc, name, word))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], word)
+      end
+      print(("%s $%.4X,Y"):format(name, word))
       pc = pc + 3
    elseif opcode.addr_mode == ZEPIX then
       local byte = buffer[pc + 1]
-      print(("$%.4X\t%s $%.2X,X"):format(base + pc, name, byte))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], byte)
+      end
+      print(("%s $%.2X,X"):format(name, byte))
       pc = pc + 2
    elseif opcode.addr_mode == ZEPIY then
       local byte = buffer[pc + 1]
-      print(("$%.4X\t%s $%.2X,Y"):format(base + pc, name, byte))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], byte)
+      end
+      print(("%s $%.2X,Y"):format(name, byte))
       pc = pc + 2
    elseif opcode.addr_mode == INDIN then
       local byte = buffer[pc+1]
-      print(("$%.4X\t%s ($%.2X,X)"):format(base + pc, name, byte))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], byte)
+      end
+      print(("%s ($%.2X,X)"):format(name, byte))
       pc = pc + 2
    elseif opcode.addr_mode == ININD then
       local byte = buffer[pc+1]
-      print(("$%.4X\t%s ($%.2X),Y"):format(base + pc, name, byte))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], byte)
+      end
+      print(("%s ($%.2X),Y"):format(name, byte))
       pc = pc + 2
    elseif opcode.addr_mode == RELAT then
       local rel_addr = buffer[pc+1]
@@ -328,10 +404,18 @@ local function decode_stmt (buffer, pos)
       else
           abs_addr = abs_addr + bit.band(rel_addr, 0x7F)
       end
-      print(("$%.4X\t%s $%.4X"):format(base + pc, name, base + abs_addr))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc], base + abs_addr)
+      end
+      print(("%s $%.4X"):format(name, base + abs_addr))
       pc = pc + 2
    elseif opcode.addr_mode == ACCUM then
-      print(("$%.4X\t%s A"):format(base + pc, name))
+      column_address(base + pc)
+      if opts.dump then
+         column_dump(buffer[pc])
+      end
+      print(("%s A"):format(name))
       pc = pc + 1
    else
       error("Invalid address mode: "..opcode.addr_mode)
@@ -449,9 +533,13 @@ local function parse_args(args)
    handlers.num_bytes = function (arg)
       opts.num_bytes = assert(tonumber(arg), "num_bytes must be a number")
    end
+   handlers.dump = function ()
+      opts.dump = true
+   end
    handlers.h = handlers.help
    handlers.b = handlers.base
    handlers.n = handlers.num_bytes
+   handlers.d = handlers.dump
    local args = process_option_arguments(args, handlers)
    if #args == 0 then usage(1) end
    return opts, args
@@ -463,7 +551,7 @@ local function main(args)
    local filename = unpack(args)
    local buffer, size = readfile(filename, opts.num_bytes)
    while pc < size do
-      decode_stmt(buffer, pc)
+      decode_stmt(buffer, pc, opts)
    end
 end
 

@@ -4,3 +4,4 @@ Options:
     -h,--help               Prints out this help.
     -b,--base       <num>   Sets base address.
     -n,--num_bytes  <num>   Sets maximum number of bytes to decode.
+    -d,--dump               Enable assembly dump in hexadecimal.
