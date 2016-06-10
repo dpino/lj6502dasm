@@ -6,11 +6,13 @@ local bit = require("bit")
 local longopts = {
    help=0,
    base=1,
+   num_bytes=1,
 }
 
 local shortopts = {
    h=0,
    b=1,
+   n=1,
 }
 
 -- Addressing modes.
@@ -345,13 +347,16 @@ local function filesize (fd)
 end
 
 -- Read filename into buffer.
-local function readfile (filename)
+local function readfile (filename, size)
    local fd, err = io.open(filename, "rb")
    if not fd then error(err) end
 
-   local size, step = filesize(fd), 4096
+   local fsize, step = filesize(fd), 4096
+   size = math.min(fsize, size or fsize)
    local buffer = ffi.new("uint8_t[?]", size)
-   for pos=0,size-1,step do
+
+   for pos=0,size,step do
+      if (size - pos) < step then step = size - pos end
       local temp = fd:read(step)
       ffi.copy(buffer + pos, temp, step)
    end
@@ -441,8 +446,12 @@ local function parse_args(args)
    handlers.base = function (arg)
       base = assert(tonumber(arg), "base must be a number")
    end
+   handlers.num_bytes = function (arg)
+      opts.num_bytes = assert(tonumber(arg), "num_bytes must be a number")
+   end
    handlers.h = handlers.help
    handlers.b = handlers.base
+   handlers.n = handlers.num_bytes
    local args = process_option_arguments(args, handlers)
    if #args == 0 then usage(1) end
    return opts, args
@@ -452,7 +461,7 @@ end
 local function main(args)
    local opts, args = parse_args(args)
    local filename = unpack(args)
-   local buffer, size = readfile(filename)
+   local buffer, size = readfile(filename, opts.num_bytes)
    while pc < size do
       decode_stmt(buffer, pc)
    end

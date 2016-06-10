@@ -1,5 +1,6 @@
 Usage: luajit disasm.lua <filename>
 
 Options:
-    -h|--help           Prints out this help.
-    -b|--base <num>     Sets base address.
+    -h,--help               Prints out this help.
+    -b,--base       <num>   Sets base address.
+    -n,--num_bytes  <num>   Sets base address.
