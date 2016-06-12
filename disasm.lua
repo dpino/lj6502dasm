@@ -10,6 +10,7 @@ local longopts = {
    base=1,
    num_bytes=1,
    dump=0,
+   cycle_count=0,
 }
 
 local shortopts = {
@@ -17,6 +18,7 @@ local shortopts = {
    b=1,
    n=1,
    d=0,
+   c=0,
 }
 
 -- Addressing modes.
@@ -277,6 +279,7 @@ Line = {}
 function Line.new (opts)
    local o = {
       _dump = opts.dump,
+      _cycle_count = opts.cycle_count,
       output = {},
    }
    return setmetatable(o, { __index = Line })
@@ -292,6 +295,7 @@ end
 
 function Line:instr (text)
    self:push(text)
+   if #text < 8 then self:push("   ") end
 end
 
 function Line:dump (byte, word)
@@ -308,6 +312,11 @@ function Line:dump (byte, word)
    end
    text = text.."\t"
    self:push(text)
+end
+
+function Line:cycle_count (opcode)
+   if not self._cycle_count then return end
+   self:push(("Cycle count: %d"):format(opcode.cycles))
 end
 
 function Line:flush ()
@@ -413,6 +422,9 @@ local function decode_stmt (buffer, pos, opts)
    else
       error("Invalid address mode: "..opcode.addr_mode)
    end
+
+   -- Add info about cycle counting if needed.
+   line:cycle_count(opcode)
 
    line:flush()
 
@@ -532,10 +544,14 @@ local function parse_args(args)
    handlers.dump = function ()
       opts.dump = true
    end
+   handlers.cycle_count = function ()
+      opts.cycle_count = true
+   end
    handlers.h = handlers.help
    handlers.b = handlers.base
    handlers.n = handlers.num_bytes
    handlers.d = handlers.dump
+   handlers.c = handlers.cycle_count
    local args = process_option_arguments(args, handlers)
    if #args == 0 then usage(1) end
    return opts, args
