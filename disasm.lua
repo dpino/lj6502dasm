@@ -3,7 +3,7 @@
 local ffi = require("ffi")
 local bit = require("bit")
 
-local bor = bit.bor
+local band, bor = bit.band, bit.bor
 
 local longopts = {
    help=0,
@@ -314,9 +314,34 @@ function Line:dump (byte, word)
    self:push(text)
 end
 
-function Line:cycle_count (opcode)
+function Line:cycle_count (opcode, pc, target_address)
    if not self._cycle_count then return end
-   self:push(("Cycle count: %d"):format(opcode.cycles))
+   local cycles = opcode.cycles
+   local exceptions = opcode.cycles_exceptions
+
+   -- No exceptions.
+   if exceptions == 0 then
+      self:push(("Cycles: %d"):format(cycles))
+      return
+   end
+
+   local crosses_page = bit.band(pc, 0xff00) ~= bit.band(target_address, 0xff00)
+   if band(exceptions, CYCLES_BRANCH_TAKEN_ADDS_ONE) and
+         band(exceptions, CYCLES_CROSS_PAGE_ADDS_ONE) then
+      if crosses_page then
+         -- +2 if branch taken and crosses page.
+         self:push(("Cycles: %d/%d"):format(cycles, cycles + 2))
+      else
+         -- +1 if branch taken.
+         self:push(("Cycles: %d/%d"):format(cycles, cycles + 1))
+      end
+      return
+   end
+
+   if crosses_page and band(exceptions, CYCLES_CROSS_PAGE_ADDS_ONE) then
+      -- +1 as crosses pages.
+      self:push(("Cycles: %d"):format(cycles + 1))
+   end
 end
 
 function Line:flush ()
@@ -326,6 +351,7 @@ end
 -- Decode statement from buffer at pos. Use PC if pos is nil.
 local function decode_stmt (buffer, pos, opts)
    pc = pos or pc
+   local target_address = pc
    local line = Line.new(opts)
    local byte = buffer[pc]
    local opcode = opcode_table[byte]
@@ -348,6 +374,7 @@ local function decode_stmt (buffer, pos, opts)
       line:address(base + pc)
       line:dump(buffer[pc], word)
       line:instr(("%s $%.4X"):format(name, word))
+      target_address = word
       pc = pc + 3
    elseif opcode.addr_mode == ZEROP then
       local byte = buffer[pc+1]
@@ -365,18 +392,21 @@ local function decode_stmt (buffer, pos, opts)
       line:address(base + pc)
       line:dump(buffer[pc], word)
       line:instr(("%s ($%.4X)"):format(name, word))
+      target_address = word
       pc = pc + 3
    elseif opcode.addr_mode == ABSIX then
       local word = r16(buffer, pc)
       line:address(base + pc)
       line:dump(buffer[pc], word)
       line:instr(("%s $%.4X,X"):format(name, word))
+      target_address = word
       pc = pc + 3
    elseif opcode.addr_mode == ABSIY then
       local word = r16(buffer, pc)
       line:address(base + pc)
       line:dump(buffer[pc], word)
       line:instr(("%s $%.4X,Y"):format(name, word))
+      target_address = word
       pc = pc + 3
    elseif opcode.addr_mode == ZEPIX then
       local byte = buffer[pc + 1]
@@ -413,6 +443,7 @@ local function decode_stmt (buffer, pos, opts)
       line:address(base + pc)
       line:dump(buffer[pc], base + abs_addr)
       line:instr(("%s $%.4X"):format(name, base + abs_addr))
+      target_address = base + abs_addr
       pc = pc + 2
    elseif opcode.addr_mode == ACCUM then
       line:address(base + pc)
@@ -424,7 +455,7 @@ local function decode_stmt (buffer, pos, opts)
    end
 
    -- Add info about cycle counting if needed.
-   line:cycle_count(opcode)
+   line:cycle_count(opcode, pc, target_address)
 
    line:flush()
 
