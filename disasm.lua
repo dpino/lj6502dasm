@@ -3,6 +3,8 @@
 local ffi = require("ffi")
 local bit = require("bit")
 
+local bor = bit.bor
+
 local longopts = {
    help=0,
    base=1,
@@ -32,7 +34,8 @@ local ININD = 10   -- Indirect indexed (with Y).
 local RELAT = 11   -- Relative.
 local ACCUM = 12   -- Accumulator.
 
-local bor = bit.bor
+local CYCLES_CROSS_PAGE_ADDS_ONE = 1
+local CYCLES_BRANCH_TAKEN_ADDS_ONE = 2
 
 local pc = 0
 local base = 0x8000
@@ -41,6 +44,8 @@ local opcode_t = ffi.typeof[[
    struct {
       const char *name;            // Opcode name.
       uint8_t addr_mode;           // Addressing mode.
+      uint8_t cycles;              // Cycles per opcode.
+      uint8_t cycles_exceptions;   // Mask of cycle-counting exceptions.
    } 
 ]]
                 
@@ -52,212 +57,212 @@ end
 -- List of opcodes.
 local opcode_table = {
    -- ADC.
-   [0x69] = opc{"ADC", IMMED},
-   [0x65] = opc{"ADC", ZEROP},
-   [0x75] = opc{"ADC", ZEPIX},
-   [0x6D] = opc{"ADC", ABSOL},
-   [0x7D] = opc{"ADC", ABSIX},
-   [0x79] = opc{"ADC", ABSIY},
-   [0x61] = opc{"ADC", INDIN},
-   [0x71] = opc{"ADC", ININD},
+   [0x69] = opc{"ADC", IMMED, 2, 0},
+   [0x65] = opc{"ADC", ZEROP, 3, 0},
+   [0x75] = opc{"ADC", ZEPIX, 4, 0},
+   [0x6D] = opc{"ADC", ABSOL, 4, 0},
+   [0x7D] = opc{"ADC", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x79] = opc{"ADC", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x61] = opc{"ADC", INDIN, 6, 0},
+   [0x71] = opc{"ADC", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- AND.
-   [0x29] = opc{"AND", IMMED},
-   [0x25] = opc{"AND", ZEROP},
-   [0x35] = opc{"AND", ZEPIX},
-   [0x2D] = opc{"AND", ABSOL},
-   [0x3D] = opc{"AND", ABSIX},
-   [0x39] = opc{"AND", ABSIY},
-   [0x21] = opc{"AND", INDIN},
-   [0x31] = opc{"AND", ININD},
+   [0x29] = opc{"AND", IMMED, 2, 0},
+   [0x25] = opc{"AND", ZEROP, 3, 0},
+   [0x35] = opc{"AND", ZEPIX, 4, 0},
+   [0x2D] = opc{"AND", ABSOL, 4, 0},
+   [0x3D] = opc{"AND", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x39] = opc{"AND", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x21] = opc{"AND", INDIN, 6, 0},
+   [0x31] = opc{"AND", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- ASL.
-   [0x0A] = opc{"ASL", ACCUM},
-   [0x06] = opc{"ASL", ZEROP},
-   [0x16] = opc{"ASL", ZEPIX},
-   [0x0E] = opc{"ASL", ABSOL},
-   [0x1E] = opc{"ASL", ABSIX},
+   [0x0A] = opc{"ASL", ACCUM, 2, 0},
+   [0x06] = opc{"ASL", ZEROP, 5, 0},
+   [0x16] = opc{"ASL", ZEPIX, 6, 0},
+   [0x0E] = opc{"ASL", ABSOL, 6, 0},
+   [0x1E] = opc{"ASL", ABSIX, 7, 0},
    -- BCC 
-   [0x90] = opc{"BCC", RELAT},
+   [0x90] = opc{"BCC", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE,  CYCLES_BRANCH_TAKEN_ADDS_ONE)},
    -- BCS 
-   [0xB0] = opc{"BCS", RELAT},
+   [0xB0] = opc{"BCS", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE, CYCLES_BRANCH_TAKEN_ADDS_ONE)},
    -- BEQ 
-   [0xF0] = opc{"BEQ", RELAT},
+   [0xF0] = opc{"BEQ", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE, CYCLES_BRANCH_TAKEN_ADDS_ONE)},
     -- BIT 
-   [0x24] = opc{"BIT", ZEROP},
-   [0x2C] = opc{"BIT", ABSOL},
+   [0x24] = opc{"BIT", ZEROP, 3, 0},
+   [0x2C] = opc{"BIT", ABSOL, 4, 0},
    -- BMI 
-   [0x30] = opc{"BMI", RELAT},
+   [0x30] = opc{"BMI", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE, CYCLES_BRANCH_TAKEN_ADDS_ONE)},
    -- BNE 
-   [0xD0] = opc{"BNE", RELAT},
+   [0xD0] = opc{"BNE", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE, CYCLES_BRANCH_TAKEN_ADDS_ONE)},
    -- BPL 
-   [0x10] = opc{"BPL", RELAT},
+   [0x10] = opc{"BPL", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE, CYCLES_BRANCH_TAKEN_ADDS_ONE)},
    -- BRK 
-   [0x00] = opc{"BRK", IMPLI},
+   [0x00] = opc{"BRK", IMPLI, 7, 0},
    -- BVC 
-   [0x50] = opc{"BVC", RELAT},
+   [0x50] = opc{"BVC", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE, CYCLES_BRANCH_TAKEN_ADDS_ONE)},
    -- BVS 
-   [0x70] = opc{"BVS", RELAT},
+   [0x70] = opc{"BVS", RELAT, 2, bor(CYCLES_CROSS_PAGE_ADDS_ONE, CYCLES_BRANCH_TAKEN_ADDS_ONE)},
    -- CLC 
-   [0x18] = opc{"CLC", IMPLI}, 
+   [0x18] = opc{"CLC", IMPLI, 2, 0}, 
    -- CLD 
-   [0xD8] = opc{"CLD", IMPLI}, 
+   [0xD8] = opc{"CLD", IMPLI, 2, 0}, 
    -- CLI 
-   [0x58] = opc{"CLI", IMPLI}, 
+   [0x58] = opc{"CLI", IMPLI, 2, 0}, 
    -- CLV 
-   [0xB8] = opc{"CLV", IMPLI}, 
+   [0xB8] = opc{"CLV", IMPLI, 2, 0}, 
    -- CMP 
-   [0xC9] = opc{"CMP", IMMED}, 
-   [0xC5] = opc{"CMP", ZEROP},
-   [0xD5] = opc{"CMP", ZEPIX},
-   [0xCD] = opc{"CMP", ABSOL},
-   [0xDD] = opc{"CMP", ABSIX},
-   [0xD9] = opc{"CMP", ABSIY},
-   [0xC1] = opc{"CMP", INDIN},
-   [0xD1] = opc{"CMP", ININD},
+   [0xC9] = opc{"CMP", IMMED, 2, 0}, 
+   [0xC5] = opc{"CMP", ZEROP, 3, 0},
+   [0xD5] = opc{"CMP", ZEPIX, 4, 0},
+   [0xCD] = opc{"CMP", ABSOL, 4, 0},
+   [0xDD] = opc{"CMP", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0xD9] = opc{"CMP", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0xC1] = opc{"CMP", INDIN, 6, 0},
+   [0xD1] = opc{"CMP", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- CPX 
-   [0xE0] = opc{"CPX", IMMED}, 
-   [0xE4] = opc{"CPX", ZEROP},
-   [0xEC] = opc{"CPX", ABSOL},
+   [0xE0] = opc{"CPX", IMMED, 2, 0}, 
+   [0xE4] = opc{"CPX", ZEROP, 3, 0},
+   [0xEC] = opc{"CPX", ABSOL, 4, 0},
    -- CPY 
-   [0xC0] = opc{"CPY", IMMED}, 
-   [0xC4] = opc{"CPY", ZEROP},
-   [0xCC] = opc{"CPY", ABSOL},
+   [0xC0] = opc{"CPY", IMMED, 2, 0}, 
+   [0xC4] = opc{"CPY", ZEROP, 3, 0},
+   [0xCC] = opc{"CPY", ABSOL, 4, 0},
    -- DEC 
-   [0xC6] = opc{"DEC", ZEROP}, 
-   [0xD6] = opc{"DEC", ZEPIX},
-   [0xCE] = opc{"DEC", ABSOL},
-   [0xDE] = opc{"DEC", ABSIX},
+   [0xC6] = opc{"DEC", ZEROP, 5, 0}, 
+   [0xD6] = opc{"DEC", ZEPIX, 6, 0},
+   [0xCE] = opc{"DEC", ABSOL, 6, 0},
+   [0xDE] = opc{"DEC", ABSIX, 7, 0},
    -- DEX 
-   [0xCA] = opc{"DEX", IMPLI}, 
+   [0xCA] = opc{"DEX", IMPLI, 2, 0}, 
    -- DEY 
-   [0x88] = opc{"DEY", IMPLI}, 
+   [0x88] = opc{"DEY", IMPLI, 2, 0}, 
    -- EOR 
-   [0x49] = opc{"EOR", IMMED}, 
-   [0x45] = opc{"EOR", ZEROP},
-   [0x55] = opc{"EOR", ZEPIX},
-   [0x4D] = opc{"EOR", ABSOL},
-   [0x5D] = opc{"EOR", ABSIX},
-   [0x59] = opc{"EOR", ABSIY},
-   [0x41] = opc{"EOR", INDIN},
-   [0x51] = opc{"EOR", ININD},
+   [0x49] = opc{"EOR", IMMED, 2, 0}, 
+   [0x45] = opc{"EOR", ZEROP, 3, 0},
+   [0x55] = opc{"EOR", ZEPIX, 4, 0},
+   [0x4D] = opc{"EOR", ABSOL, 4, 0},
+   [0x5D] = opc{"EOR", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x59] = opc{"EOR", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x41] = opc{"EOR", INDIN, 6, 1},
+   [0x51] = opc{"EOR", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- INC 
-   [0xE6] = opc{"INC", ZEROP}, 
-   [0xF6] = opc{"INC", ZEPIX},
-   [0xEE] = opc{"INC", ABSOL},
-   [0xFE] = opc{"INC", ABSIX},
+   [0xE6] = opc{"INC", ZEROP, 5, 0}, 
+   [0xF6] = opc{"INC", ZEPIX, 6, 0},
+   [0xEE] = opc{"INC", ABSOL, 6, 0},
+   [0xFE] = opc{"INC", ABSIX, 7, 0},
    -- INX 
-   [0xE8] = opc{"INX", IMPLI}, 
+   [0xE8] = opc{"INX", IMPLI, 2, 0}, 
    -- INY 
-   [0xC8] = opc{"INY", IMPLI}, 
+   [0xC8] = opc{"INY", IMPLI, 2, 0}, 
    -- JMP 
-   [0x4C] = opc{"JMP", ABSOL}, 
-   [0x6C] = opc{"JMP", INDIA},
+   [0x4C] = opc{"JMP", ABSOL, 3, 0}, 
+   [0x6C] = opc{"JMP", INDIA, 5, 0},
    -- JSR 
-   [0x20] = opc{"JSR", ABSOL}, 
+   [0x20] = opc{"JSR", ABSOL, 6, 0}, 
    -- LDA 
-   [0xA9] = opc{"LDA", IMMED}, 
-   [0xA5] = opc{"LDA", ZEROP},
-   [0xB5] = opc{"LDA", ZEPIX},
-   [0xAD] = opc{"LDA", ABSOL},
-   [0xBD] = opc{"LDA", ABSIX},
-   [0xB9] = opc{"LDA", ABSIY},
-   [0xA1] = opc{"LDA", INDIN},
-   [0xB1] = opc{"LDA", ININD},
+   [0xA9] = opc{"LDA", IMMED, 2, 0}, 
+   [0xA5] = opc{"LDA", ZEROP, 3, 0},
+   [0xB5] = opc{"LDA", ZEPIX, 4, 0},
+   [0xAD] = opc{"LDA", ABSOL, 4, 0},
+   [0xBD] = opc{"LDA", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0xB9] = opc{"LDA", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0xA1] = opc{"LDA", INDIN, 6, 0},
+   [0xB1] = opc{"LDA", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- LDX 
-   [0xA2] = opc{"LDX", IMMED}, 
-   [0xA6] = opc{"LDX", ZEROP},
-   [0xB6] = opc{"LDX", ZEPIY},
-   [0xAE] = opc{"LDX", ABSOL},
-   [0xBE] = opc{"LDX", ABSIY},
+   [0xA2] = opc{"LDX", IMMED, 2, 0}, 
+   [0xA6] = opc{"LDX", ZEROP, 3, 0},
+   [0xB6] = opc{"LDX", ZEPIY, 4, 0},
+   [0xAE] = opc{"LDX", ABSOL, 4, 0},
+   [0xBE] = opc{"LDX", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- LDY 
-   [0xA0] = opc{"LDY", IMMED}, 
-   [0xA4] = opc{"LDY", ZEROP},
-   [0xB4] = opc{"LDY", ZEPIX},
-   [0xAC] = opc{"LDY", ABSOL},
-   [0xBC] = opc{"LDY", ABSIX},
+   [0xA0] = opc{"LDY", IMMED, 2, 0}, 
+   [0xA4] = opc{"LDY", ZEROP, 3, 0},
+   [0xB4] = opc{"LDY", ZEPIX, 4, 0},
+   [0xAC] = opc{"LDY", ABSOL, 4, 0},
+   [0xBC] = opc{"LDY", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- LSR 
-   [0x4A] = opc{"LSR", ACCUM}, 
-   [0x46] = opc{"LSR", ZEROP},
-   [0x56] = opc{"LSR", ZEPIX},
-   [0x4E] = opc{"LSR", ABSOL},
-   [0x5E] = opc{"LSR", ABSIX},
+   [0x4A] = opc{"LSR", ACCUM, 2, 0}, 
+   [0x46] = opc{"LSR", ZEROP, 5, 0},
+   [0x56] = opc{"LSR", ZEPIX, 6, 0},
+   [0x4E] = opc{"LSR", ABSOL, 6, 0},
+   [0x5E] = opc{"LSR", ABSIX, 7, 0},
    -- NOP 
-   [0xEA] = opc{"NOP", IMPLI}, 
+   [0xEA] = opc{"NOP", IMPLI, 2, 0}, 
    -- ORA 
-   [0x09] = opc{"ORA", IMMED}, 
-   [0x05] = opc{"ORA", ZEROP},
-   [0x15] = opc{"ORA", ZEPIX},
-   [0x0D] = opc{"ORA", ABSOL},
-   [0x1D] = opc{"ORA", ABSIX},
-   [0x19] = opc{"ORA", ABSIY},
-   [0x01] = opc{"ORA", INDIN},
-   [0x11] = opc{"ORA", ININD},
+   [0x09] = opc{"ORA", IMMED, 2, 0}, 
+   [0x05] = opc{"ORA", ZEROP, 3, 0},
+   [0x15] = opc{"ORA", ZEPIX, 4, 0},
+   [0x0D] = opc{"ORA", ABSOL, 4, 0},
+   [0x1D] = opc{"ORA", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x19] = opc{"ORA", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x01] = opc{"ORA", INDIN, 6, 0},
+   [0x11] = opc{"ORA", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- PHA 
-   [0x48] = opc{"PHA", IMPLI}, 
+   [0x48] = opc{"PHA", IMPLI, 3, 0}, 
    -- PHP 
-   [0x08] = opc{"PHP", IMPLI}, 
+   [0x08] = opc{"PHP", IMPLI, 3, 0}, 
    -- PLA 
-   [0x68] = opc{"PLA", IMPLI}, 
+   [0x68] = opc{"PLA", IMPLI, 4, 0}, 
    -- PLP 
-   [0x28] = opc{"PLP", IMPLI}, 
+   [0x28] = opc{"PLP", IMPLI, 4, 0}, 
    -- ROL 
-   [0x2A] = opc{"ROL", ACCUM}, 
-   [0x26] = opc{"ROL", ZEROP},
-   [0x36] = opc{"ROL", ZEPIX},
-   [0x2E] = opc{"ROL", ABSOL},
-   [0x3E] = opc{"ROL", ABSIX},
+   [0x2A] = opc{"ROL", ACCUM, 2, 0}, 
+   [0x26] = opc{"ROL", ZEROP, 5, 0},
+   [0x36] = opc{"ROL", ZEPIX, 6, 0},
+   [0x2E] = opc{"ROL", ABSOL, 6, 0},
+   [0x3E] = opc{"ROL", ABSIX, 7, 0},
    -- ROR 
-   [0x6A] = opc{"ROR", ACCUM}, 
-   [0x66] = opc{"ROR", ZEROP},
-   [0x76] = opc{"ROR", ZEPIX},
-   [0x6E] = opc{"ROR", ABSOL},
-   [0x7E] = opc{"ROR", ABSIX},
+   [0x6A] = opc{"ROR", ACCUM, 2, 0}, 
+   [0x66] = opc{"ROR", ZEROP, 5, 0},
+   [0x76] = opc{"ROR", ZEPIX, 6, 0},
+   [0x6E] = opc{"ROR", ABSOL, 6, 0},
+   [0x7E] = opc{"ROR", ABSIX, 7, 0},
    -- RTI 
-   [0x40] = opc{"RTI", IMPLI}, 
+   [0x40] = opc{"RTI", IMPLI, 6, 0}, 
    -- RTS 
-   [0x60] = opc{"RTS", IMPLI}, 
+   [0x60] = opc{"RTS", IMPLI, 6, 0}, 
    -- SBC 
-   [0xE9] = opc{"SBC", IMMED}, 
-   [0xE5] = opc{"SBC", ZEROP},
-   [0xF5] = opc{"SBC", ZEPIX},
-   [0xED] = opc{"SBC", ABSOL},
-   [0xFD] = opc{"SBC", ABSIX},
-   [0xF9] = opc{"SBC", ABSIY},
-   [0xE1] = opc{"SBC", INDIN},
-   [0xF1] = opc{"SBC", ININD},
+   [0xE9] = opc{"SBC", IMMED, 2, 0}, 
+   [0xE5] = opc{"SBC", ZEROP, 3, 0},
+   [0xF5] = opc{"SBC", ZEPIX, 4, 0},
+   [0xED] = opc{"SBC", ABSOL, 4, 0},
+   [0xFD] = opc{"SBC", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0xF9] = opc{"SBC", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0xE1] = opc{"SBC", INDIN, 6, 0},
+   [0xF1] = opc{"SBC", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- SEC 
-   [0x38] = opc{"SEC", IMPLI}, 
+   [0x38] = opc{"SEC", IMPLI, 2, 0}, 
    -- SED 
-   [0xF8] = opc{"SED", IMPLI}, 
+   [0xF8] = opc{"SED", IMPLI, 2, 0}, 
    -- SEI 
-   [0x78] = opc{"SEI", IMPLI}, 
+   [0x78] = opc{"SEI", IMPLI, 2, 0}, 
    -- STA 
-   [0x85] = opc{"STA", ZEROP}, 
-   [0x95] = opc{"STA", ZEPIX},
-   [0x8D] = opc{"STA", ABSOL},
-   [0x9D] = opc{"STA", ABSIX},
-   [0x99] = opc{"STA", ABSIY},
-   [0x81] = opc{"STA", INDIN},
-   [0x91] = opc{"STA", ININD},
+   [0x85] = opc{"STA", ZEROP, 3, 0}, 
+   [0x95] = opc{"STA", ZEPIX, 4, 0},
+   [0x8D] = opc{"STA", ABSOL, 4, 0},
+   [0x9D] = opc{"STA", ABSIX, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x99] = opc{"STA", ABSIY, 4, CYCLES_CROSS_PAGE_ADDS_ONE},
+   [0x81] = opc{"STA", INDIN, 6, 0},
+   [0x91] = opc{"STA", ININD, 5, CYCLES_CROSS_PAGE_ADDS_ONE},
    -- STX 
-   [0x86] = opc{"STX", ZEROP}, 
-   [0x96] = opc{"STX", ZEPIY},
-   [0x8E] = opc{"STX", ABSOL},
+   [0x86] = opc{"STX", ZEROP, 3, 0}, 
+   [0x96] = opc{"STX", ZEPIY, 4, 0},
+   [0x8E] = opc{"STX", ABSOL, 4, 0},
    -- STY 
-   [0x84] = opc{"STY", ZEROP}, 
-   [0x94] = opc{"STY", ZEPIX},
-   [0x8C] = opc{"STY", ABSOL},
+   [0x84] = opc{"STY", ZEROP, 3, 0}, 
+   [0x94] = opc{"STY", ZEPIX, 4, 0},
+   [0x8C] = opc{"STY", ABSOL, 4, 0},
    -- TAX 
-   [0xAA] = opc{"TAX", IMPLI}, 
+   [0xAA] = opc{"TAX", IMPLI, 2, 0}, 
    -- TAY 
-   [0xA8] = opc{"TAY", IMPLI}, 
+   [0xA8] = opc{"TAY", IMPLI, 2, 0}, 
    -- TSX 
-   [0xBA] = opc{"TSX", IMPLI}, 
+   [0xBA] = opc{"TSX", IMPLI, 2, 0}, 
    -- TXA 
-   [0x8A] = opc{"TXA", IMPLI}, 
+   [0x8A] = opc{"TXA", IMPLI, 2, 0}, 
    -- TXS 
-   [0x9A] = opc{"TXS", IMPLI}, 
+   [0x9A] = opc{"TXS", IMPLI, 2, 0}, 
    -- TYA 
-   [0x98] = opc{"TYA", IMPLI},
+   [0x98] = opc{"TYA", IMPLI, 2, 0},
 }
 
 -- Read 16-bit word.
